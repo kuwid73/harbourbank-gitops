@@ -14,6 +14,18 @@ for humans and AI agents alike.
 | `platform/manifests/` | Plain manifests deployed alongside add-ons (e.g. SealedSecrets) |
 | `apps/` | Harbour Bank application manifests (dev, qa, prod overlays) |
 
+## Daily stop / start
+
+State survives a stop: ArgoCD, Grafana, Loki logs and the sealed-secrets key all live in the node containers' volumes.
+
+```bash
+./bootstrap/lab-stop.sh    # end of day (~10s)
+./bootstrap/lab-start.sh   # next day: starts the cluster, waits until every ArgoCD app is Synced/Healthy (~30s-2min)
+```
+
+Start Docker Desktop first. Don't `k3d cluster delete` - that destroys the sealed-secrets key, so the
+committed SealedSecrets could no longer be decrypted.
+
 ## Rebuild from scratch
 
 ```bash

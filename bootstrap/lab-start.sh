@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Start of day: resume the stopped lab and wait until ArgoCD reports every app healthy.
+set -euo pipefail
+
+CLUSTER=agentic-lab
+LOCAL_CONTAINERS=(hb-pg hb-api)   # database first
+TIMEOUT_SECONDS=600
+
+k3d cluster start "$CLUSTER"
+kubectl config use-context "k3d-$CLUSTER"
+kubectl wait --for=condition=Ready nodes --all --timeout=180s
+
+echo "waiting for ArgoCD apps to be Synced and Healthy..."
+deadline=$((SECONDS + TIMEOUT_SECONDS))
+while true; do
+  not_ready=$(kubectl -n argocd get applications.argoproj.io -o json 2>/dev/null \
+    | jq -r '.items[] | select(.status.sync.status != "Synced" or .status.health.status != "Healthy")
+             | "  \(.metadata.name): \(.status.sync.status // "?")/\(.status.health.status // "?")"') || not_ready="  (ArgoCD API not ready yet)"
+  [[ -z "$not_ready" ]] && break
+  if (( SECONDS > deadline )); then
+    echo "still not ready after ${TIMEOUT_SECONDS}s:"; echo "$not_ready"; exit 1
+  fi
+  sleep 10
+done
+kubectl -n argocd get applications.argoproj.io
+
+for c in "${LOCAL_CONTAINERS[@]}"; do
+  docker start "$c" >/dev/null 2>&1 && echo "started $c" || true
+done
+echo "lab ready: http://argocd.localhost:8080  http://grafana.localhost:8080"
