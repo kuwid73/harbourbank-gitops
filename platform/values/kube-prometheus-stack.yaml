@@ -1,0 +1,49 @@
+# k3s runs controller-manager, scheduler and proxy inside the k3s binary and uses
+# sqlite instead of etcd, so these scrape targets don't exist. Disabling them avoids
+# permanently-firing "TargetDown" alerts that would mislead the agent.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false
+
+prometheus:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts: [prometheus.localhost]
+    paths: ["/"]
+  prometheusSpec:
+    retention: 3d
+    # Pick up ServiceMonitors/PodMonitors/rules from every namespace, not only
+    # ones labelled with this Helm release (our app will ship its own ServiceMonitor)
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+
+alertmanager:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts: [alertmanager.localhost]
+    paths: ["/"]
+
+grafana:
+  admin:
+    existingSecret: grafana-admin     # SealedSecret in platform/manifests/monitoring
+    userKey: admin-user
+    passwordKey: admin-password
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts: [grafana.localhost]
+  additionalDataSources:
+    - name: Loki
+      uid: loki
+      type: loki
+      access: proxy
+      url: http://loki.monitoring.svc:3100

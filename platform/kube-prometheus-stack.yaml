@@ -1,0 +1,42 @@
+# Prometheus, Alertmanager, Grafana, kube-state-metrics, node-exporter.
+# Third source deploys plain manifests (e.g. Grafana admin SealedSecret) from platform/manifests/monitoring.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 92.14.0
+      helm:
+        releaseName: kube-prometheus-stack
+        valueFiles:
+          - $values/platform/values/kube-prometheus-stack.yaml
+    - repoURL: https://github.com/kuwid73/orders-gitops.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/kuwid73/orders-gitops.git
+      targetRevision: main
+      path: platform/manifests/monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  # The operator's webhook certs are injected at runtime; don't treat that as drift
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions: ['.webhooks[]?.clientConfig.caBundle']
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions: ['.webhooks[]?.clientConfig.caBundle']
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true        # Prometheus Operator CRDs are too large for client-side apply
+      - RespectIgnoreDifferences=true
