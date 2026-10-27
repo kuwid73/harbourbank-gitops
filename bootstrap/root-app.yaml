@@ -1,0 +1,20 @@
+# The "app of apps": every Application manifest in platform/ becomes a child app.
+# Applied once by bootstrap.sh; after that, add/remove platform components via Git only.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kuwid73/orders-gitops.git
+    targetRevision: main
+    path: platform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -1,0 +1,28 @@
+# k3d cluster for the agentic DevOps lab.
+# Create:  k3d cluster create --config bootstrap/k3d-config.yaml
+# Delete:  k3d cluster delete agentic-lab
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: agentic-lab
+servers: 1          # control plane (also runs workloads, as in k3s default)
+agents: 2           # worker nodes -> enables scheduling/drain/taint scenarios
+kubeAPI:
+  # Bind the API server to loopback only, on a fixed port so kubeconfig is stable across rebuilds
+  hostIP: "127.0.0.1"
+  hostPort: "6445"
+ports:
+  # k3d's load balancer forwards host ports to Traefik (k3s' bundled ingress); loopback only
+  - port: 127.0.0.1:8080:80
+    nodeFilters: [loadbalancer]
+  - port: 127.0.0.1:8443:443
+    nodeFilters: [loadbalancer]
+options:
+  k3s:
+    nodeLabels:
+      # agent-0 hosts stateful workloads (Postgres); apps can go anywhere
+      - label: workload=stateful
+        nodeFilters: [agent:0]
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: true   # context name: k3d-agentic-lab
