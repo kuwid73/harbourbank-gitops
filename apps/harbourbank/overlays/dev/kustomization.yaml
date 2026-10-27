@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Resources (base + dev patches) are added with the GitOps manifests.
+
+# Written by harbourbank-app CI on every merge to main - don't edit by hand.
+# newTag says which commit; digest makes the reference immutable (a tag can be re-pushed).
+images:
+  - name: ghcr.io/kuwid73/harbourbank-accounts-api
+    newTag: sha-pending
