@@ -6,4 +6,5 @@ kind: Kustomization
 # newTag says which commit; digest makes the reference immutable (a tag can be re-pushed).
 images:
   - name: ghcr.io/kuwid73/harbourbank-accounts-api
-    newTag: sha-pending
+    newTag: sha-8f555c9
+    digest: sha256:f6818d11a85f23b35b11f0c65a7060ac62fe9572a320ae8014f1a718d01df440
