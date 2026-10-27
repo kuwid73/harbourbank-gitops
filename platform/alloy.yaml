@@ -14,7 +14,7 @@ spec:
         releaseName: alloy
         valueFiles:
           - $values/platform/values/alloy.yaml
-    - repoURL: https://github.com/kuwid73/orders-gitops.git
+    - repoURL: https://github.com/kuwid73/harbourbank-gitops.git
       targetRevision: main
       ref: values
   destination:

@@ -15,10 +15,10 @@ spec:
         releaseName: kube-prometheus-stack
         valueFiles:
           - $values/platform/values/kube-prometheus-stack.yaml
-    - repoURL: https://github.com/kuwid73/orders-gitops.git
+    - repoURL: https://github.com/kuwid73/harbourbank-gitops.git
       targetRevision: main
       ref: values
-    - repoURL: https://github.com/kuwid73/orders-gitops.git
+    - repoURL: https://github.com/kuwid73/harbourbank-gitops.git
       targetRevision: main
       path: platform/manifests/monitoring
   destination:

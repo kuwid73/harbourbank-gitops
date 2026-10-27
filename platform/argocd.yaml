@@ -15,7 +15,7 @@ spec:
         releaseName: argocd
         valueFiles:
           - $values/platform/values/argocd.yaml
-    - repoURL: https://github.com/kuwid73/orders-gitops.git
+    - repoURL: https://github.com/kuwid73/harbourbank-gitops.git
       targetRevision: main
       ref: values
   destination:
