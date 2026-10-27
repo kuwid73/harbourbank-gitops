@@ -1,0 +1,30 @@
+# CloudNativePG operator: runs Postgres clusters declared as `Cluster` resources
+# (one per Harbour Bank environment) - provisioning, standby replicas, failover and
+# generated credentials, so no database password is ever written by a human.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudnative-pg
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://cloudnative-pg.github.io/charts
+    chart: cloudnative-pg
+    targetRevision: 0.29.1
+    helm:
+      releaseName: cnpg
+      valuesObject:
+        fullnameOverride: cnpg-controller-manager
+        monitoring:
+          podMonitorEnabled: true   # operator metrics into Prometheus
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cnpg-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true   # the operator's CRDs exceed the client-side apply annotation limit
