@@ -15,6 +15,13 @@ for humans and AI agents alike.
 | `apps/harbourbank/base/` | accounts-api, its Postgres (CloudNativePG) and the migration Job |
 | `apps/harbourbank/overlays/` | dev / qa / prod differences; each folder becomes an ArgoCD app (`platform/harbourbank.yaml`) |
 
+## Change control
+
+`main` accepts changes only through pull requests; anything that reaches production
+(see `.github/CODEOWNERS`) needs a code owner's approval. CI's deploy key is the one
+direct writer, for dev image bumps. Promotion PRs (dev -> qa -> prod) are opened by the
+`promote` workflow. Settings are applied by `./bootstrap/github-governance.sh` (repo admin).
+
 ## Daily stop / start
 
 State survives a stop: ArgoCD, Grafana, Loki logs and the sealed-secrets key all live in the node containers' volumes.
