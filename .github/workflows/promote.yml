@@ -1,0 +1,112 @@
+# Promotion PRs: dev -> qa -> prod.
+# When an environment's image pin changes on main, propose the same version for the
+# next environment as a pull request. The workflow only ever *proposes*: a person
+# merges the qa PR, and a code owner must approve the prod PR (CODEOWNERS + ruleset).
+#
+# GitHub can't see the cluster (it's bound to localhost), so the PR links the evidence
+# to check in ArgoCD: the source environment's post-deployment smoke test.
+name: promote
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/harbourbank/overlays/dev/kustomization.yaml
+      - apps/harbourbank/overlays/qa/kustomization.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/kuwid73/harbourbank-accounts-api
+  APP_REPO: kuwid73/harbourbank-app
+
+jobs:
+  propose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write        # push the promote/<env> branch
+      pull-requests: write   # open or update the PR
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - { source: dev, target: qa }
+          - { source: qa, target: prod }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # zizmor: ignore[artipacked] - this job must push its branch; it uploads no artifacts
+      - name: Propose ${{ matrix.source }} -> ${{ matrix.target }}
+        env:
+          SOURCE: ${{ matrix.source }}
+          TARGET: ${{ matrix.target }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          overlay() { echo "apps/harbourbank/overlays/$1/kustomization.yaml"; }
+          pin() { yq '.images[] | select(.name == strenv(IMAGE)) | .newTag + "@" + .digest' "$1"; }
+
+          want=$(pin "$(overlay "$SOURCE")")
+          have=$(pin "$(overlay "$TARGET")")
+          if [[ "$want" == "$have" ]]; then
+            echo "$TARGET already runs $SOURCE's version ($want)"; exit 0
+          fi
+
+          branch="promote/$TARGET"
+          if git fetch --quiet origin "$branch" 2>/dev/null \
+             && [[ "$(git show "FETCH_HEAD:$(overlay "$TARGET")" | pin /dev/stdin)" == "$want" ]]; then
+            echo "an open PR already proposes $want for $TARGET"; exit 0
+          fi
+
+          tag=${want%@*}; digest=${want#*@}; old_tag=${have%@*}
+          git switch --quiet -c "$branch"
+          TAG=$tag DIGEST=$digest yq -i \
+            '(.images[] | select(.name == strenv(IMAGE))) |= (.newTag = strenv(TAG) | .digest = strenv(DIGEST))' \
+            "$(overlay "$TARGET")"
+          kubectl kustomize "apps/harbourbank/overlays/$TARGET" > /dev/null   # the PR must render
+
+          git config user.name "harbourbank-promote"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --quiet -am "$TARGET: accounts-api $tag"
+          git push --quiet --force origin "$branch"
+
+          # Evidence for the reviewer
+          app_url="$GITHUB_SERVER_URL/$APP_REPO"
+          changes=$(gh api "repos/$APP_REPO/compare/${old_tag#sha-}...${tag#sha-}" \
+            --jq '.commits[] | "- [`\(.sha[:7])`](\(.html_url)) \(.commit.message | split("\n")[0])"' 2>/dev/null \
+            || echo "- (could not compare ${old_tag} and ${tag})")
+          approval="Merge when the checks below are satisfied."
+          [[ "$TARGET" == prod ]] && approval="**Production change: requires approval from a code owner** (\`.github/CODEOWNERS\`)."
+          cat > body.md <<BODY
+          Promote **accounts-api \`$tag\`** from **$SOURCE** to **$TARGET**.
+
+          $approval
+
+          | | Before | After |
+          |---|---|---|
+          | Version | [\`$old_tag\`]($app_url/commit/${old_tag#sha-}) | [\`$tag\`]($app_url/commit/${tag#sha-}) |
+          | Image digest | | \`$digest\` |
+
+          ### Changes since $TARGET's current version
+          $changes
+
+          ### Reviewer checklist
+          - [ ] \`harbourbank-$SOURCE\` is *Synced* and *Healthy* in ArgoCD and its last sync **Succeeded** (the PostSync smoke test passed on this exact version)
+          - [ ] No \`AccountsApi*\` / \`AccountsDb*\` alerts firing for \`harbourbank-$SOURCE\`
+          - [ ] The image was built and Trivy-scanned by [harbourbank-app CI]($app_url/actions/workflows/ci.yml)
+
+          After merge, ArgoCD rolls out \`harbourbank-$TARGET\` (database → migration → API → smoke test).
+          BODY
+
+          title="Promote accounts-api $tag to $TARGET"
+          if pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number' | grep .); then
+            gh pr edit "$pr" --title "$title" --body-file body.md
+          else
+            gh pr create --base main --head "$branch" --title "$title" --body-file body.md
+          fi

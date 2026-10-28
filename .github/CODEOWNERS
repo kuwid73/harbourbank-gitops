@@ -1,0 +1,8 @@
+# Changes to these paths need a code owner's approval before they can merge
+# (enforced by the `main` branch ruleset). Everything listed here reaches
+# production: the prod overlay directly, base/ and platform/ in every environment.
+/apps/harbourbank/overlays/prod/  @kuwid73
+/apps/harbourbank/base/           @kuwid73
+/platform/                        @kuwid73
+/bootstrap/                       @kuwid73
+/.github/                         @kuwid73

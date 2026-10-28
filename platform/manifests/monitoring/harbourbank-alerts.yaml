@@ -54,6 +54,13 @@ spec:
           annotations:
             summary: "Database migration failed in {{ $labels.namespace }}"
             description: "ArgoCD stopped the rollout, so the previous API version keeps running. The migration Job's logs show the failing Alembic revision."
+        - alert: AccountsApiSmokeTestFailed
+          expr: kube_job_status_failed{namespace=~"harbourbank-.*", job_name="accounts-api-smoke-test"} > 0
+          labels:
+            severity: '{{ if eq $labels.namespace "harbourbank-prod" }}critical{{ else }}warning{{ end }}'
+          annotations:
+            summary: "Post-deployment smoke test failed in {{ $labels.namespace }}"
+            description: "The version just deployed is not serving correctly (not ready, wrong version, or database lookups failing). Do not promote it; the smoke test Job's logs list the failed checks."
     - name: harbourbank.accounts-db
       rules:
         - alert: AccountsDbDown

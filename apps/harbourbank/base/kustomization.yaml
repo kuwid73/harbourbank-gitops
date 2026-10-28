@@ -7,6 +7,7 @@ resources:
   - accounts-db.yaml
   - migrate-job.yaml
   - accounts-api.yaml
+  - smoke-test-job.yaml
 # Settings shared by every environment; overlays merge in their own values.
 # The generated name carries a content hash, so changing a value rolls the pods.
 configMapGenerator:
@@ -16,3 +17,6 @@ configMapGenerator:
       - LOG_LEVEL=INFO
       - DB_POOL_SIZE=5
       - DAILY_TRANSFER_LIMIT_CENTS=1000000
+  - name: accounts-api-smoke-test
+    files:
+      - smoke_test.py
