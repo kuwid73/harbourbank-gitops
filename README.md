@@ -18,7 +18,7 @@ for humans and AI agents alike.
 ## Change control
 
 `main` accepts changes only through pull requests; anything that reaches production
-(see `.github/CODEOWNERS`) needs a code owner's approval. CI's deploy key is the one
+(see `.github/CODEOWNERS`) needs a code owner's approval (every PR needs 1 approval). CI's deploy key is the one
 direct writer, for dev image bumps. Promotion PRs (dev -> qa -> prod) are opened by the
 `promote` workflow. Settings are applied by `./bootstrap/github-governance.sh` (repo admin).
 
