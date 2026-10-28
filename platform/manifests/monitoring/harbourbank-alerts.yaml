@@ -1,6 +1,8 @@
 # Alert rules for every Harbour Bank environment, defined once. Each alert carries the
 # `namespace` label (harbourbank-dev/qa/prod); severity is critical in prod, warning elsewhere.
 # The annotations are written for the on-call engineer - and for the diagnosing agent.
+# Job alerts use kube_job_failed: the Job gave up after its retries. A failed attempt
+# that a retry fixed (kube_job_status_failed > 0) is not an incident.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -48,14 +50,14 @@ spec:
             summary: "Database connection pool full on {{ $labels.pod }} ({{ $labels.namespace }})"
             description: "All pooled connections are in use; new requests wait, then fail with 503 db_pool_exhausted. Look for slow queries or long transactions; DB_POOL_SIZE is in the accounts-api-config ConfigMap."
         - alert: AccountsDbMigrationFailed
-          expr: kube_job_status_failed{namespace=~"harbourbank-.*", job_name="accounts-db-migrate"} > 0
+          expr: kube_job_failed{namespace=~"harbourbank-.*", job_name="accounts-db-migrate", condition="true"} == 1
           labels:
             severity: '{{ if eq $labels.namespace "harbourbank-prod" }}critical{{ else }}warning{{ end }}'
           annotations:
             summary: "Database migration failed in {{ $labels.namespace }}"
             description: "ArgoCD stopped the rollout, so the previous API version keeps running. The migration Job's logs show the failing Alembic revision."
         - alert: AccountsApiSmokeTestFailed
-          expr: kube_job_status_failed{namespace=~"harbourbank-.*", job_name="accounts-api-smoke-test"} > 0
+          expr: kube_job_failed{namespace=~"harbourbank-.*", job_name="accounts-api-smoke-test", condition="true"} == 1
           labels:
             severity: '{{ if eq $labels.namespace "harbourbank-prod" }}critical{{ else }}warning{{ end }}'
           annotations:
