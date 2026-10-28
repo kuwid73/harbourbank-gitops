@@ -16,11 +16,9 @@ patches:
       - op: replace
         path: /spec/rules/0/host
         value: accounts-dev.localhost
-
-
 # Written by harbourbank-app CI on every merge to main - don't edit by hand.
 # newTag says which commit; digest makes the reference immutable (a tag can be re-pushed).
 images:
   - name: ghcr.io/kuwid73/harbourbank-accounts-api
-    newTag: sha-8f555c9
-    digest: sha256:f6818d11a85f23b35b11f0c65a7060ac62fe9572a320ae8014f1a718d01df440
+    newTag: sha-2764763
+    digest: sha256:659b97cd285ece55927204593250c7a29e90c524df02c92ff07ad9d16bd677ce
