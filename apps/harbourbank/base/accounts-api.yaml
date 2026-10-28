@@ -32,9 +32,17 @@ spec:
           labelSelector:
             matchLabels:
               app.kubernetes.io/name: accounts-api
+      # Graceful shutdown: Kubernetes removes a stopping pod from the Service and sends it
+      # SIGTERM at the same moment, so for a few seconds traffic still arrives. preStop keeps
+      # serving through that window; then uvicorn finishes in-flight requests and exits.
+      terminationGracePeriodSeconds: 30
       containers:
         - name: accounts-api
           image: ghcr.io/kuwid73/harbourbank-accounts-api
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
           ports:
             - name: http
               containerPort: 8000

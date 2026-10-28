@@ -22,6 +22,8 @@ def get(path):
             return response.status, response.read()
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read()
+    except (urllib.error.URLError, TimeoutError) as exc:   # refused, timed out, DNS
+        return 0, str(exc).encode()
 
 
 def log(level, msg, **fields):
@@ -31,12 +33,14 @@ def log(level, msg, **fields):
 def main():
     failures = []
 
-    status, _ = get("/readyz")
+    status, body = get("/readyz")
     if status != 200:
-        failures.append(f"/readyz returned {status}")
+        failures.append(f"/readyz returned {status or body.decode()}")
 
     status, body = get("/info")
     info = json.loads(body) if status == 200 else {}
+    if status != 200:
+        failures.append(f"/info returned {status or body.decode()}")
     expected = {"git_sha": os.environ["GIT_SHA"], "environment": os.environ["ENVIRONMENT"]}
     for key, want in expected.items():
         if info.get(key) != want:
@@ -44,7 +48,7 @@ def main():
 
     status, body = get("/accounts?account_number=HB0000000000")
     if status != 200 or json.loads(body) != []:
-        failures.append(f"account lookup returned {status}")
+        failures.append(f"account lookup returned {status or body.decode()}")
 
     if failures:
         log("ERROR", "smoke test failed", failures=failures, **expected)
