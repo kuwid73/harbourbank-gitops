@@ -8,6 +8,7 @@ resources:
   - migrate-job.yaml
   - accounts-api.yaml
   - smoke-test-job.yaml
+  - customer-simulator.yaml
 # Settings shared by every environment; overlays merge in their own values.
 # The generated name carries a content hash, so changing a value rolls the pods.
 configMapGenerator:
@@ -20,3 +21,12 @@ configMapGenerator:
   - name: accounts-api-smoke-test
     files:
       - smoke_test.py
+  - name: customer-simulator
+    files:
+      - customer_simulator.py
+  # Traffic volume per environment; prod overrides it
+  - name: customer-simulator-config
+    literals:
+      - SIM_CUSTOMERS=20
+      - SIM_REQUESTS_PER_SECOND=0.5
+      - SALARY_CONCURRENCY=20

@@ -8,6 +8,12 @@ configMapGenerator:
     behavior: merge
     literals:
       - ENVIRONMENT=prod
+  # More customers and traffic in production
+  - name: customer-simulator-config
+    behavior: merge
+    literals:
+      - SIM_CUSTOMERS=60
+      - SIM_REQUESTS_PER_SECOND=2
 patches:
   - target:
       kind: Ingress
