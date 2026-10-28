@@ -3,7 +3,6 @@
 set -euo pipefail
 
 CLUSTER=agentic-lab
-LOCAL_CONTAINERS=(hb-pg hb-api)   # database first
 TIMEOUT_SECONDS=600
 
 k3d cluster start "$CLUSTER"
@@ -24,7 +23,5 @@ while true; do
 done
 kubectl -n argocd get applications.argoproj.io
 
-for c in "${LOCAL_CONTAINERS[@]}"; do
-  docker start "$c" >/dev/null 2>&1 && echo "started $c" || true
-done
 echo "lab ready: http://argocd.localhost:8080  http://grafana.localhost:8080"
+echo "bank:      http://accounts-dev.localhost:8080  http://accounts-qa.localhost:8080  http://accounts.localhost:8080"
