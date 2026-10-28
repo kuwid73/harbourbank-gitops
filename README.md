@@ -12,7 +12,8 @@ for humans and AI agents alike.
 | `platform/` | One ArgoCD `Application` per cluster add-on (watched by the `root` app) |
 | `platform/values/` | Helm values for those add-ons |
 | `platform/manifests/` | Plain manifests deployed alongside add-ons (e.g. SealedSecrets) |
-| `apps/` | Harbour Bank application manifests (dev, qa, prod overlays) |
+| `apps/harbourbank/base/` | accounts-api, its Postgres (CloudNativePG) and the migration Job |
+| `apps/harbourbank/overlays/` | dev / qa / prod differences; each folder becomes an ArgoCD app (`platform/harbourbank.yaml`) |
 
 ## Daily stop / start
 
@@ -31,6 +32,16 @@ committed SealedSecrets could no longer be decrypted.
 ```bash
 ./bootstrap/bootstrap.sh
 ```
+
+## Harbour Bank environments
+
+| Env | URL | Changed by |
+|---|---|---|
+| dev | <http://accounts-dev.localhost:8080> | CI, on every merge to `harbourbank-app` main |
+| qa | <http://accounts-qa.localhost:8080> | promotion PR |
+| prod | <http://accounts.localhost:8080> | promotion PR approved by a code owner |
+
+Rollout order inside each environment (ArgoCD sync waves): database healthy -> migration Job succeeds -> API.
 
 ## UIs
 

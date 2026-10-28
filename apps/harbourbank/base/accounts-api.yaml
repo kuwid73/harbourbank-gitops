@@ -1,0 +1,127 @@
+# accounts-api: the Harbour Bank internet-banking API and UI
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accounts-api
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"   # after the migration Job succeeded
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: accounts-api
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0   # never fewer ready pods than desired during a rollout
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: accounts-api
+    spec:
+      automountServiceAccountToken: false   # the API never talks to Kubernetes
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: accounts-api
+      containers:
+        - name: accounts-api
+          image: ghcr.io/kuwid73/harbourbank-accounts-api
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: accounts-api-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: accounts-db-app
+                  key: uri
+          # Readiness checks the database: a pod that can't reach it stops getting traffic.
+          # Liveness doesn't: restarting pods can't fix a database outage, only make it worse.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: accounts-api
+  labels:
+    app.kubernetes.io/name: accounts-api
+spec:
+  selector:
+    app.kubernetes.io/name: accounts-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: accounts-api
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: accounts.localhost   # each overlay sets its own host
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: accounts-api
+                port:
+                  name: http
+---
+# Prometheus scrapes /metrics from every accounts-api pod (job="accounts-api")
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: accounts-api
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: accounts-api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

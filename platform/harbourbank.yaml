@@ -1,0 +1,52 @@
+# One ArgoCD Application per Harbour Bank environment: every folder under
+# apps/harbourbank/overlays/ (dev, qa, prod) becomes harbourbank-<folder>,
+# deployed into namespace harbourbank-<folder>.
+# All three sync automatically - the change gate is Git: dev is written by CI,
+# qa and prod change only through reviewed promotion PRs.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: harbourbank
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/kuwid73/harbourbank-gitops.git
+        revision: HEAD
+        directories:
+          - path: apps/harbourbank/overlays/*
+  # Removing an overlay folder (or this ApplicationSet) deletes the Application but
+  # leaves the running workloads and data in place - an environment is never
+  # torn down by accident
+  syncPolicy:
+    preserveResourcesOnDeletion: true
+  template:
+    metadata:
+      name: 'harbourbank-{{ .path.basename }}'
+      labels:
+        app.kubernetes.io/part-of: harbourbank
+        environment: '{{ .path.basename }}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/kuwid73/harbourbank-gitops.git
+        targetRevision: HEAD
+        path: '{{ .path.path }}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'harbourbank-{{ .path.basename }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+        managedNamespaceMetadata:
+          labels:
+            environment: '{{ .path.basename }}'
+            # Kubernetes rejects any pod that runs as root, escalates privileges or
+            # mounts host paths - enforced by the API server, not by convention
+            pod-security.kubernetes.io/enforce: restricted
+            pod-security.kubernetes.io/enforce-version: latest

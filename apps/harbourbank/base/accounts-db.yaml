@@ -1,0 +1,48 @@
+# Postgres for accounts-api, run by the CloudNativePG operator.
+# The operator generates the credentials into Secret `accounts-db-app`
+# (keys: username, password, host, dbname, uri, ...) - no human ever sees the password.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: accounts-db
+  annotations:
+    # Wave 0: the database must be healthy before the migration (wave 1) and the API (wave 2)
+    argocd.argoproj.io/sync-wave: "0"
+    # A Git change can never delete the bank's database: not by pruning, not by deleting the app
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  instances: 1
+  # Same major/minor as the test suite (testcontainers postgres:17); digest-pinned like our own image
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.11-minimal-trixie@sha256:87f97b9a922e469b91faaaa36ced7c2092cf890efd3622f29095d252b70b9718
+  bootstrap:
+    initdb:
+      database: bank
+      owner: bank
+  storage:
+    size: 1Gi
+  affinity:
+    nodeSelector:
+      workload: stateful   # the k3d agent reserved for stateful workloads
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  postgresql:
+    parameters:
+      # Slow statements are logged (and so reach Loki) - evidence for performance investigations
+      log_min_duration_statement: "500ms"
+---
+# Database metrics (connections, replication lag, transactions) into Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: accounts-db
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/cluster: accounts-db
+      cnpg.io/podRole: instance
+  podMetricsEndpoints:
+    - port: metrics

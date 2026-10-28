@@ -1,6 +1,22 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# Resources (base + dev patches) are added with the GitOps manifests.
+namespace: harbourbank-dev
+resources:
+  - ../../base
+configMapGenerator:
+  - name: accounts-api-config
+    behavior: merge
+    literals:
+      - ENVIRONMENT=dev
+patches:
+  - target:
+      kind: Ingress
+      name: accounts-api
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: accounts-dev.localhost
+
 
 # Written by harbourbank-app CI on every merge to main - don't edit by hand.
 # newTag says which commit; digest makes the reference immutable (a tag can be re-pushed).

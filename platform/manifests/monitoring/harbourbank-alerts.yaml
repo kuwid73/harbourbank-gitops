@@ -1,0 +1,66 @@
+# Alert rules for every Harbour Bank environment, defined once. Each alert carries the
+# `namespace` label (harbourbank-dev/qa/prod); severity is critical in prod, warning elsewhere.
+# The annotations are written for the on-call engineer - and for the diagnosing agent.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: harbourbank
+  namespace: monitoring
+spec:
+  groups:
+    - name: harbourbank.accounts-api
+      rules:
+        - alert: AccountsApiUnavailable
+          expr: kube_deployment_status_replicas_available{namespace=~"harbourbank-.*", deployment="accounts-api"} == 0
+          for: 2m
+          labels:
+            severity: '{{ if eq $labels.namespace "harbourbank-prod" }}critical{{ else }}warning{{ end }}'
+          annotations:
+            summary: "accounts-api has no ready pods in {{ $labels.namespace }}"
+            description: "Customers cannot use internet banking. Check pod status/events (crash loop, failed readiness = database unreachable, image pull, config error in the startup log)."
+        - alert: AccountsApiHighErrorRate
+          expr: |
+            sum by (namespace) (rate(http_requests_total{job="accounts-api", status=~"5.."}[5m]))
+              / sum by (namespace) (rate(http_requests_total{job="accounts-api"}[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: '{{ if eq $labels.namespace "harbourbank-prod" }}critical{{ else }}warning{{ end }}'
+          annotations:
+            summary: "{{ $value | humanizePercentage }} of accounts-api requests fail in {{ $labels.namespace }}"
+            description: "Over 5% of requests return 5xx. The `error` field in the JSON logs tells which: database_unavailable, db_pool_exhausted or internal_error (with request_id)."
+        - alert: AccountsApiSlowResponses
+          expr: |
+            histogram_quantile(0.95, sum by (namespace, le) (
+              rate(http_request_duration_seconds_bucket{job="accounts-api", route!~"/healthz|/readyz|/metrics|/info"}[5m])
+            )) > 0.5
+          for: 10m
+          labels:
+            severity: '{{ if eq $labels.namespace "harbourbank-prod" }}critical{{ else }}warning{{ end }}'
+          annotations:
+            summary: "accounts-api p95 latency is {{ $value | humanizeDuration }} in {{ $labels.namespace }}"
+            description: "95th percentile above 500ms. Compare per-route latency; slow SQL (>500ms) is logged by Postgres; check database CPU and connection-pool usage."
+        - alert: AccountsApiDbPoolSaturated
+          expr: max by (namespace, pod) (db_pool_connections_in_use{job="accounts-api"} / db_pool_size{job="accounts-api"}) >= 1
+          for: 2m
+          labels:
+            severity: '{{ if eq $labels.namespace "harbourbank-prod" }}critical{{ else }}warning{{ end }}'
+          annotations:
+            summary: "Database connection pool full on {{ $labels.pod }} ({{ $labels.namespace }})"
+            description: "All pooled connections are in use; new requests wait, then fail with 503 db_pool_exhausted. Look for slow queries or long transactions; DB_POOL_SIZE is in the accounts-api-config ConfigMap."
+        - alert: AccountsDbMigrationFailed
+          expr: kube_job_status_failed{namespace=~"harbourbank-.*", job_name="accounts-db-migrate"} > 0
+          labels:
+            severity: '{{ if eq $labels.namespace "harbourbank-prod" }}critical{{ else }}warning{{ end }}'
+          annotations:
+            summary: "Database migration failed in {{ $labels.namespace }}"
+            description: "ArgoCD stopped the rollout, so the previous API version keeps running. The migration Job's logs show the failing Alembic revision."
+    - name: harbourbank.accounts-db
+      rules:
+        - alert: AccountsDbDown
+          expr: cnpg_collector_up{namespace=~"harbourbank-.*"} == 0
+          for: 2m
+          labels:
+            severity: '{{ if eq $labels.namespace "harbourbank-prod" }}critical{{ else }}warning{{ end }}'
+          annotations:
+            summary: "Postgres instance {{ $labels.pod }} is down in {{ $labels.namespace }}"
+            description: "The CloudNativePG metrics exporter reports Postgres as not running. Check the Cluster status (kubectl get cluster accounts-db) and the instance pod's logs."
