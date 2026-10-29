@@ -40,5 +40,5 @@ patches:
 # Changed only by a promotion PR from qa, approved by a code owner.
 images:
   - name: ghcr.io/kuwid73/harbourbank-accounts-api
-    newTag: sha-2764763
-    digest: sha256:659b97cd285ece55927204593250c7a29e90c524df02c92ff07ad9d16bd677ce
+    newTag: sha-493df0c
+    digest: sha256:c8af1a2b49a759abd1f390585c2d7c75980dbd558571583cdf95da0654572b32
