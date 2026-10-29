@@ -8,10 +8,10 @@
 #   * exceptions: harbourbank-app CI's deploy key pushes dev image bumps directly;
 #     admins may merge a PR without approval (recorded as "bypass") but never push directly
 #   * GitHub Actions may open PRs (the promote workflow)
-# harbourbank-app (the code):
+# harbourbank-app (the code) and harbourbank-ops-mcp (the agents' read-only MCP server):
 #   * main changes only through pull requests with 1 approval and a passing `test` check;
 #     squash merges only; admins may bypass on a PR (recorded), never push directly
-# Both: no force-push to or deletion of main; merged branches are deleted.
+# All: no force-push to or deletion of main; merged branches are deleted.
 #
 # Note: GitHub ignores "require code owner review" unless at least 1 approval is required.
 # Verify enforcement in Settings -> Rules -> Insights (each merge shows pass/bypass/fail).
@@ -62,14 +62,16 @@ apply_ruleset "$OWNER/harbourbank-gitops" \
 gh api -X PUT "repos/$OWNER/harbourbank-gitops/actions/permissions/workflow" \
   -f default_workflow_permissions=read -F can_approve_pull_request_reviews=true
 
-apply_ruleset "$OWNER/harbourbank-app" "[ $admin_on_prs ]" ',
+for repo in harbourbank-app harbourbank-ops-mcp; do
+  apply_ruleset "$OWNER/$repo" "[ $admin_on_prs ]" ',
     { "type": "required_status_checks", "parameters": {
         "strict_required_status_checks_policy": false,
         "required_status_checks": [ { "context": "test", "integration_id": '$ACTIONS_APP_ID' } ]
     } }'
+done
 
 echo "Applied. Current state:"
-for repo in harbourbank-gitops harbourbank-app; do
+for repo in harbourbank-gitops harbourbank-app harbourbank-ops-mcp; do
   gh api "repos/$OWNER/$repo/rulesets" --jq '.[].id' | while read -r id; do
     gh api "repos/$OWNER/$repo/rulesets/$id" --jq "\"  $repo: \" + .name + \" [\" + .enforcement + \"] rules=\" + ([.rules[].type] | join(\",\")) + \" approvals=\" + ((.rules[] | select(.type==\"pull_request\") | .parameters.required_approving_review_count) | tostring)"
   done
