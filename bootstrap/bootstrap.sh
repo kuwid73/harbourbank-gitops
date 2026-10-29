@@ -11,6 +11,8 @@ ARGOCD_CHART_VERSION=$(yq '.spec.sources[0].targetRevision' platform/argocd.yaml
 if ! k3d cluster list "$CLUSTER" >/dev/null 2>&1; then
   k3d cluster create --config bootstrap/k3d-config.yaml
 fi
+# The cluster network exists now; the nodes already point at the caches (k3d-config.yaml)
+./bootstrap/image-cache.sh up
 kubectl config use-context "k3d-$CLUSTER"
 
 helm repo add argo https://argoproj.github.io/argo-helm >/dev/null 2>&1 || true

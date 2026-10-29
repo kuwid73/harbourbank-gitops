@@ -26,3 +26,16 @@ options:
   kubeconfig:
     updateDefaultKubeconfig: true
     switchCurrentContext: true   # context name: k3d-agentic-lab
+registries:
+  # Pull-through caches (bootstrap/image-cache.sh runs them on the cluster network, with no host port):
+  # each image is downloaded from the internet once and then served to every node locally.
+  # If a cache is down, containerd falls back to the upstream registry, so a cache never blocks a pull.
+  # Also copied into running nodes by `image-cache.sh configure`, which reads it from here.
+  config: |
+    mirrors:
+      ghcr.io:
+        endpoint:
+          - http://lab-cache-ghcr:5000
+      docker.io:
+        endpoint:
+          - http://lab-cache-dockerhub:5000

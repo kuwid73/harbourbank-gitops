@@ -31,6 +31,11 @@ State survives a stop: ArgoCD, Grafana, Loki logs and the sealed-secrets key all
 ./bootstrap/lab-start.sh   # next day: starts the cluster, waits until every ArgoCD app is Synced/Healthy (~30s-2min)
 ```
 
+Both scripts also start and stop the **image caches** (`bootstrap/image-cache.sh`): two local
+pull-through registries, for ghcr.io and Docker Hub, on the cluster network with no host port.
+Each image is downloaded once and served to all three nodes; if a cache is down, nodes pull from
+the internet as before. The mirror settings live in `bootstrap/k3d-config.yaml`.
+
 Start Docker Desktop first. Don't `k3d cluster delete` - that destroys the sealed-secrets key, so the
 committed SealedSecrets could no longer be decrypted.
 
