@@ -17,15 +17,33 @@ declare -A UPSTREAMS=(
   [ghcr]=https://ghcr.io
   [dockerhub]=https://registry-1.docker.io
 )
+# Fixed addresses at the top of the network. Docker hands out addresses from the bottom in start
+# order, and k3s refuses to start if a node's address changes: a cache started before the nodes
+# once took their addresses and put both agents in a restart loop (NOTES.md, 2026-10-29).
+declare -A HOST_PART=([ghcr]=255.250 [dockerhub]=255.251)
+
+network_prefix() {   # "172.19" for 172.19.0.0/16 (k3d's default size)
+  local subnet
+  subnet=$(docker network inspect "$NETWORK" --format '{{(index .IPAM.Config 0).Subnet}}')
+  [[ $subnet == *.0.0/16 ]] || { echo "expected a /16 network, got $subnet" >&2; exit 1; }
+  echo "${subnet%.0.0/16}"
+}
 
 up() {
+  local prefix ip current
+  prefix=$(network_prefix)
   for name in "${!UPSTREAMS[@]}"; do
     local c="lab-cache-$name"
+    ip="$prefix.${HOST_PART[$name]}"
+    current=$(docker container inspect "$c" --format "{{with index .NetworkSettings.Networks \"$NETWORK\"}}{{with .IPAMConfig}}{{.IPv4Address}}{{end}}{{end}}" 2>/dev/null || true)
+    if docker container inspect "$c" >/dev/null 2>&1 && [[ $current != "$ip" ]]; then
+      docker rm -f "$c" >/dev/null   # not on its fixed address: recreate (the cached data stays in the volume)
+    fi
     if docker container inspect "$c" >/dev/null 2>&1; then
       docker start "$c" >/dev/null
     else
       # REGISTRY_PROXY_TTL: keep cached images 30 days (the default is 7)
-      docker run -d --name "$c" --network "$NETWORK" \
+      docker run -d --name "$c" --network "$NETWORK" --ip "$ip" \
         -v "$c:/var/lib/registry" \
         -e REGISTRY_PROXY_REMOTEURL="${UPSTREAMS[$name]}" \
         -e REGISTRY_PROXY_TTL=720h \
@@ -33,7 +51,7 @@ up() {
         -e REGISTRY_LOG_LEVEL=info \
         "$REGISTRY_IMAGE" >/dev/null
     fi
-    echo "started $c -> ${UPSTREAMS[$name]}"
+    echo "started $c ($ip) -> ${UPSTREAMS[$name]}"
   done
 }
 
