@@ -73,3 +73,26 @@ spec:
           annotations:
             summary: "Postgres instance {{ $labels.pod }} is down in {{ $labels.namespace }}"
             description: "The CloudNativePG metrics exporter reports Postgres as not running. Check the Cluster status (kubectl get cluster accounts-db) and the instance pod's logs."
+    # Published by accounts-api from the eod_runs table (the batch Job is too short-lived to scrape).
+    # max by (namespace): every API replica reports the same values.
+    - name: harbourbank.end-of-day
+      rules:
+        - alert: BankLedgerOutOfBalance
+          expr: |
+            max by (namespace) (abs(bank_ledger_imbalance_cents{namespace=~"harbourbank-.*"})) > 0
+            or max by (namespace) (bank_ledger_inconsistencies{namespace=~"harbourbank-.*"}) > 0
+          labels:
+            severity: '{{ if eq $labels.namespace "harbourbank-prod" }}critical{{ else }}warning{{ end }}'
+          annotations:
+            summary: "The ledger does not balance in {{ $labels.namespace }}"
+            description: "The last end-of-day check found balances that do not sum to zero, or accounts/transfers whose ledger entries disagree. No interest is paid until it is fixed. Query eod_runs for the failing day and verify_ledger() for the affected accounts; treat as a financial incident."
+        # The batch closes yesterday at 00:15 UTC, so the latest closed business day is normally
+        # 24-48h old. Over 49h means yesterday was still not closed by 01:00 (job failed or never ran).
+        - alert: EndOfDayBatchOverdue
+          expr: time() - max by (namespace) (bank_eod_last_business_date_timestamp_seconds{namespace=~"harbourbank-.*"}) > 49 * 3600
+          for: 15m
+          labels:
+            severity: '{{ if eq $labels.namespace "harbourbank-prod" }}critical{{ else }}warning{{ end }}'
+          annotations:
+            summary: "Yesterday's business day has not been closed in {{ $labels.namespace }}"
+            description: "The end-of-day batch has not closed a business day for {{ $value | humanizeDuration }} (since its start). Interest is not being paid. Check the end-of-day CronJob's recent Jobs and their logs; a failed day is retried by the next run, or manually with kubectl create job --from=cronjob/end-of-day."

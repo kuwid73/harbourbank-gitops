@@ -1,0 +1,57 @@
+# End-of-day batch: closes yesterday's business day (UTC) - checks the ledger, pays daily
+# interest, checks again and records the result in eod_runs. The API publishes that result
+# as bank_eod_* / bank_ledger_* metrics. Safe to re-run; missed days are caught up in order.
+#
+# Demo / manual run:  kubectl -n harbourbank-prod create job --from=cronjob/end-of-day end-of-day-manual-1
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: end-of-day
+spec:
+  schedule: "15 0 * * *"
+  timeZone: Etc/UTC          # business days are UTC in the app, whatever the node's clock zone
+  concurrencyPolicy: Forbid
+  # The lab is switched off overnight: when it starts, run the missed 00:15 batch if it is
+  # less than 18 hours late (the batch itself closes every day it missed, oldest first)
+  startingDeadlineSeconds: 64800
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: end-of-day
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: end-of-day
+              image: ghcr.io/kuwid73/harbourbank-accounts-api
+              command: ["python", "-m", "accounts_api.eod"]
+              envFrom:
+                - configMapRef:
+                    name: accounts-api-config
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: accounts-db-app
+                      key: uri
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
