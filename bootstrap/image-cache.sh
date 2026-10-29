@@ -51,12 +51,12 @@ configure() {
     if [[ "$(docker exec "$node" cat /etc/rancher/k3s/registries.yaml 2>/dev/null)" == "$wanted" ]]; then
       echo "$node: already configured"
     else
-      printf '%s\n' "$wanted" | docker exec -i "$node" sh -c 'cat > /etc/rancher/k3s/registries.yaml'
+      printf '%s\n' "$wanted" | docker exec -i "$node" sh -c 'mkdir -p /etc/rancher/k3s && cat > /etc/rancher/k3s/registries.yaml'
       echo "$node: configured"
       changed=1
     fi
   done
-  # k3s reads registries.yaml only at startup
+  # k3s reads registries.yaml only at startup. Agent nodes have no /etc/rancher/k3s until then, hence mkdir -p
   (( changed )) && echo "restart the lab to apply: ./bootstrap/lab-stop.sh && ./bootstrap/lab-start.sh" || true
 }
 
