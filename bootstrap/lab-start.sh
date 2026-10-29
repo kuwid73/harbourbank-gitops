@@ -5,6 +5,7 @@ set -euo pipefail
 CLUSTER=agentic-lab
 TIMEOUT_SECONDS=600
 
+"$(dirname "$0")/image-cache.sh" up   # before the nodes, so their first pulls go through the cache
 k3d cluster start "$CLUSTER"
 kubectl config use-context "k3d-$CLUSTER"
 kubectl wait --for=condition=Ready nodes --all --timeout=180s
