@@ -1,0 +1,157 @@
+# harbourbank-observer: the read-only identity of the Phase 2 MCP server (harbourbank-ops-mcp).
+#
+# What it can do:   read workloads, logs, events, ArgoCD apps and databases in the Harbour Bank
+#                   namespaces; query Prometheus and Loki (HTTP GET only); see node status.
+# What it cannot:   write anything anywhere; read Secrets or ConfigMaps; exec into pods;
+#                   read any other namespace's workloads.
+#
+# Check:  kubectl auth can-i --list --as=system:serviceaccount:agent-access:harbourbank-observer -n harbourbank-prod
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: harbourbank-observer
+  namespace: agent-access
+automountServiceAccountToken: false   # no pod runs as it; its token is issued to the MCP server on request
+---
+# Per-namespace read access, granted below in each Harbour Bank namespace only
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: harbourbank-observer-workloads
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, events, services, endpoints, persistentvolumeclaims]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch]
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [get, list, watch]
+  - apiGroups: [postgresql.cnpg.io]
+    resources: [clusters]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: harbourbank-observer
+  namespace: harbourbank-dev
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: harbourbank-observer-workloads
+subjects:
+  - kind: ServiceAccount
+    name: harbourbank-observer
+    namespace: agent-access
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: harbourbank-observer
+  namespace: harbourbank-qa
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: harbourbank-observer-workloads
+subjects:
+  - kind: ServiceAccount
+    name: harbourbank-observer
+    namespace: agent-access
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: harbourbank-observer
+  namespace: harbourbank-prod
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: harbourbank-observer-workloads
+subjects:
+  - kind: ServiceAccount
+    name: harbourbank-observer
+    namespace: agent-access
+---
+# ArgoCD: what is deployed, its sync/health and history (Applications hold no credentials)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: harbourbank-observer
+  namespace: argocd
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [applications, applicationsets]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: harbourbank-observer
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: harbourbank-observer
+subjects:
+  - kind: ServiceAccount
+    name: harbourbank-observer
+    namespace: agent-access
+---
+# Prometheus and Loki through the Kubernetes API's service proxy. "get" allows HTTP GET only
+# (a POST would need "create"), and only to these two services. The proxied path names the
+# service as <name>:<port>, so that is the form listed.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: harbourbank-observer
+  namespace: monitoring
+rules:
+  - apiGroups: [""]
+    resources: [services/proxy]
+    resourceNames: ["kube-prometheus-stack-prometheus:9090", "loki:3100"]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: harbourbank-observer
+  namespace: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: harbourbank-observer
+subjects:
+  - kind: ServiceAccount
+    name: harbourbank-observer
+    namespace: agent-access
+---
+# Cluster-wide: node health and the list of namespaces, nothing else
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: harbourbank-observer-cluster
+rules:
+  - apiGroups: [""]
+    resources: [nodes, namespaces]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: harbourbank-observer-cluster
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: harbourbank-observer-cluster
+subjects:
+  - kind: ServiceAccount
+    name: harbourbank-observer
+    namespace: agent-access
