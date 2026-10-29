@@ -9,6 +9,7 @@ resources:
   - accounts-api.yaml
   - smoke-test-job.yaml
   - customer-simulator.yaml
+  - end-of-day.yaml
 # Settings shared by every environment; overlays merge in their own values.
 # The generated name carries a content hash, so changing a value rolls the pods.
 configMapGenerator:
@@ -18,6 +19,7 @@ configMapGenerator:
       - LOG_LEVEL=INFO
       - DB_POOL_SIZE=5
       - DAILY_TRANSFER_LIMIT_CENTS=1000000
+      - INTEREST_RATE_BPS=150   # 1.50% a year, paid daily by the end-of-day batch
   - name: accounts-api-smoke-test
     files:
       - smoke_test.py
