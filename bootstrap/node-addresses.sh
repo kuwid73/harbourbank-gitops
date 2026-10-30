@@ -32,8 +32,9 @@ pinned_ip() {
     --format "{{with index .NetworkSettings.Networks \"$NETWORK\"}}{{with .IPAMConfig}}{{.IPv4Address}}{{end}}{{end}}"
 }
 
-current_ip() {
-  docker container inspect "$1" --format "{{with index .NetworkSettings.Networks \"$NETWORK\"}}{{.IPAddress}}{{end}}"
+current_ip() {   # empty while stopped (Docker would print "invalid IP")
+  docker container inspect "$1" \
+    --format "{{if .State.Running}}{{with index .NetworkSettings.Networks \"$NETWORK\"}}{{.IPAddress}}{{end}}{{end}}"
 }
 
 record() {
@@ -87,7 +88,8 @@ check() {
 status() {
   local name role
   while read -r name role; do
-    printf '%-26s %-13s now=%-14s pinned=%s\n' "$name" "$role" "$(current_ip "$name")" "$(pinned_ip "$name")"
+    printf '%-26s %-13s now=%-14s pinned=%s\n' "$name" "$role" "$(current_ip "$name" | grep . || echo stopped)" \
+      "$(pinned_ip "$name" | grep . || echo no)"
   done < <(containers)
 }
 
