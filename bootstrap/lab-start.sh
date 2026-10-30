@@ -6,9 +6,14 @@ CLUSTER=agentic-lab
 TIMEOUT_SECONDS=600
 
 "$(dirname "$0")/image-cache.sh" up   # before the nodes, so their first pulls go through the cache
+"$(dirname "$0")/node-addresses.sh" check   # nothing running may hold a node's pinned address
 k3d cluster start "$CLUSTER"
 kubectl config use-context "k3d-$CLUSTER"
 kubectl wait --for=condition=Ready nodes --all --timeout=180s
+# A node that restarted during start-up came up on the wrong address (see node-addresses.sh)
+docker ps --filter "label=k3d.cluster=$CLUSTER" --format '{{.Names}}' \
+  | xargs docker inspect --format '{{.Name}} {{.RestartCount}}' \
+  | awk '$2 > 0 { print "warning: " substr($1, 2) " restarted " $2 " times during start-up" }'
 
 echo "waiting for ArgoCD apps to be Synced and Healthy..."
 deadline=$((SECONDS + TIMEOUT_SECONDS))
