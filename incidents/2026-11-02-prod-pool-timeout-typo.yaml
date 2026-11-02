@@ -1,0 +1,23 @@
+id: 2026-11-02-prod-pool-timeout-typo
+title: A prod config typo (DB_POOL_TIMEOUT_SECONDS=5s) stopped the new API pod starting, so prod's rollout stalled
+environments: [prod]
+started: 2026-11-02T13:06:19Z    # ArgoCD rolled out the change; the new pod crash-looped from here
+detected: 2026-11-02T13:30:08Z   # the engineer asked the ops assistant; see detected_by for the alerts
+restored: 2026-11-02T13:37:36Z   # ArgoCD: Degraded -> Healthy on the revert; smoke test passed
+detected_by: >
+  engineer, from ArgoCD's Degraded status, confirmed with the ops assistant (Claude Desktop). Alerts
+  fired from 13:17:00 (TargetDown), but nothing routes them to a person.
+caused_by: gitops#20             # DORA drill 2: a deliberately failed change
+remediation: rollback (gitops#21, a revert PR)
+impact: >
+  None for customers: prod served about 5,900 requests from 13:00 to 13:40 with no 5xx errors, because
+  maxUnavailable 0 kept both old pods serving. For 31 minutes prod could not complete a rollout, and a
+  restart of an old pod would have picked up the broken config.
+follow_up: >
+  Route alerts to a person (Alertmanager). Give the agent its own GitHub identity (Phase 3): #20 and #21
+  were opened from the engineer's own account, so the only review was a comment and both merged as an
+  admin bypass. Validate config values in CI before merge.
+evidence: >
+  GitHub (merge times, reviews); Kubernetes events (rollout, crash loop); Loki (ArgoCD health changes at
+  13:06:20, 13:16:20 and 13:37:36); Prometheus (ALERTS, http_requests_total); the ops MCP audit log
+  (first question 13:30:08). Times are to the second.
