@@ -1,0 +1,14 @@
+id: 2026-10-29-node-addresses
+title: The image caches took the nodes' network addresses at start-up, so both agent nodes restart-looped
+environments: [dev, qa, prod]
+started: 2026-10-29T07:53:00Z
+detected: 2026-10-29T07:53:00Z
+restored: 2026-10-29T07:57:00Z
+detected_by: engineer, during the planned lab restart that applied the change
+caused_by: gitops#11             # lab-start.sh started the caches before the cluster
+remediation: manual recovery (stop the cluster and caches, start the cluster alone)
+impact: The bank was unavailable in all three environments for about 4 minutes. No data was lost.
+follow_up: gitops#13 (fixed cache addresses), gitops#16 (pinned node addresses)
+evidence: >
+  NOTES.md "Root cause: the image caches took the nodes' network addresses"; the times are
+  approximate (to the minute), from the lab session.

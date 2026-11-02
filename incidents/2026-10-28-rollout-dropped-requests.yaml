@@ -1,0 +1,16 @@
+id: 2026-10-28-rollout-dropped-requests
+title: New connections could fail during every single-pod rollout (a routing race at pod shutdown)
+environments: [dev, qa]
+started: 2026-10-28T06:32:20Z    # the first rollout where it was seen (sha-2764763 to dev)
+detected: 2026-10-28T06:32:20Z
+restored: 2026-10-28T07:41:04Z   # the fix (PR #2) synced by ArgoCD
+detected_by: post-deployment smoke test (its first attempt timed out; it passed on retry)
+caused_by: gitops@6d1f593        # the first deployment manifests, without a preStop pause
+remediation: fix forward
+impact: >
+  During a rollout, a request could reach a pod whose network was already gone. The smoke test's
+  first attempt timed out in 3 of 3 single-pod rollouts in dev and qa. Prod (2 pods) was not seen to fail.
+follow_up: gitops#2 (a 5-second preStop pause before shutdown)
+evidence: >
+  NOTES.md "Root cause: requests could fail during every rollout"; the times are the dev deployment
+  commit (816cd3b) and ArgoCD's sync of the fix (b158424).

@@ -1,0 +1,16 @@
+id: 2026-10-30-agent-restarts-at-start
+title: Agent nodes restarted during the morning lab start because their addresses weren't pinned
+environments: [dev, qa, prod]
+started: 2026-10-30T02:59:00Z
+detected: 2026-10-30T03:00:16Z
+restored: 2026-10-30T03:00:16Z
+detected_by: engineer, checking restart counts after lab-start.sh
+# No caused_by: no change caused it. The 2026-10-29 recovery left two nodes on each other's
+# addresses, and Docker doesn't keep a stopped container's address unless it is pinned.
+remediation: none (recovered by itself in about 20 seconds)
+impact: >
+  agent-0 restarted 3 times and agent-1 twice. The end-of-day batch's first attempt in each
+  environment failed on DNS while the nodes settled; its retries succeeded.
+follow_up: gitops#16 (pin the node addresses)
+evidence: >
+  NOTES.md "Root cause: agents still restart at start-up because their addresses aren't pinned".
