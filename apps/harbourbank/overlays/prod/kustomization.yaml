@@ -8,8 +8,6 @@ configMapGenerator:
     behavior: merge
     literals:
       - ENVIRONMENT=prod
-      # Fail fast when the pool is exhausted under prod load, instead of queueing requests
-      - DB_POOL_TIMEOUT_SECONDS=5s
   # More customers and traffic in production
   - name: customer-simulator-config
     behavior: merge
