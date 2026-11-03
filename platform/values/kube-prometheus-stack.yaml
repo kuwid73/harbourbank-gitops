@@ -31,6 +31,53 @@ alertmanager:
     ingressClassName: traefik
     hosts: [alertmanager.localhost]
     paths: ["/"]
+  alertmanagerSpec:
+    # The Slack webhook URL (SealedSecret in platform/manifests/monitoring), mounted at
+    # /etc/alertmanager/secrets/alertmanager-slack/webhook-url
+    secrets: [alertmanager-slack]
+  # The chart's defaults (inhibit rules, Watchdog to nowhere), plus one route: prod alerts go to the
+  # engineer's Slack channel. dev and qa alerts stay in Alertmanager's UI: nobody is paged for them.
+  config:
+    global:
+      resolve_timeout: 5m
+    inhibit_rules:
+      - source_matchers: ['severity = critical']
+        target_matchers: ['severity =~ warning|info']
+        equal: [namespace, alertname]
+      - source_matchers: ['severity = warning']
+        target_matchers: ['severity = info']
+        equal: [namespace, alertname]
+      - source_matchers: ['alertname = InfoInhibitor']
+        target_matchers: ['severity = info']
+        equal: [namespace]
+      - target_matchers: ['alertname = InfoInhibitor']
+    route:
+      group_by: [namespace]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: 'null'
+      routes:
+        - receiver: 'null'
+          matchers: ['alertname = "Watchdog"']
+        - receiver: slack
+          matchers: ['namespace = "harbourbank-prod"', 'severity =~ "warning|critical"']
+          repeat_interval: 4h   # an alert still firing is re-posted every 4 hours
+    receivers:
+      - name: 'null'
+      # A bank on Microsoft 365 uses the same route with a Teams workflow webhook instead:
+      #   msteamsv2_configs: [{webhook_url_file: <mounted secret>, send_resolved: true}]
+      - name: slack
+        slack_configs:
+          - api_url_file: /etc/alertmanager/secrets/alertmanager-slack/webhook-url
+            send_resolved: true   # also post when the alert clears: that is "restored"
+            title: '{{ .Status | toUpper }}: {{ .CommonLabels.alertname }} in {{ .CommonLabels.namespace }}'
+            text: >-
+              {{ range .Alerts }}*{{ .Labels.alertname }}* ({{ .Labels.severity }}):
+              {{ or .Annotations.summary .Annotations.description }}
+              {{ end }}
+    templates:
+      - '/etc/alertmanager/config/*.tmpl'
 
 grafana:
   admin:
