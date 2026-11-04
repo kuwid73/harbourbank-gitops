@@ -15,7 +15,7 @@ Nothing here is deployed: ArgoCD doesn't read this folder.
 | `title` | one line: what went wrong |
 | `environments` | the environments affected: `dev`, `qa`, `prod` |
 | `started` | when service was first affected (UTC, ISO 8601, e.g. `2026-10-29T07:53:00Z`) |
-| `detected` | when a person or an alert knew |
+| `detected` | when a person knew: the first alert that reached someone, or the first person to notice. An alert that fired but reached nobody doesn't count (say so in `detected_by`), so the record shows the gap |
 | `restored` | when service was back to normal; leave it out while the incident is open |
 | `detected_by` | who or what noticed: an alert, a smoke test, an engineer, a customer |
 | `caused_by` | the change that caused it: `gitops#<PR>` for a pull request, `gitops@<sha7>` for a direct push. Leave it out when no change caused it: those incidents are reported, but don't count as change failures |
