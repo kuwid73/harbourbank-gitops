@@ -1,0 +1,32 @@
+id: 2026-11-04-dev-accounts-api-oom
+title: 'dev accounts-api rollout stuck: new pods OOMKilled after right-sizing (#25)'
+environments:
+- dev
+started: '2026-11-04T10:23:54Z'
+detected: '2026-11-04T10:50:00Z'
+restored: '2026-11-04T11:15:29Z'
+detected_by: Engineer (kuwid73) noticed dev looked wrong; KubePodCrashLooping, KubePodNotReady and KubeDeploymentRolloutStuck
+  were firing at the time
+caused_by: gitops#25
+remediation: rollback
+impact: 'Dev deployment degraded for about 52 minutes: the new accounts-api pod crash-looped and the rollout
+  exceeded its progress deadline, and ArgoCD reported Degraded with the sync Failed after 5 retries. The
+  PostSync smoke test never ran. No API outage: the previous pod (accounts-api-6b7c4d89db-gfhjh) stayed
+  Ready and kept serving. The database stayed healthy and the ledger imbalance stayed at 0. qa and prod
+  were not affected.'
+follow_up: 'If dev node capacity is still needed, re-do the right-sizing using measured accounts-api memory
+  usage plus headroom, rather than the values in #25. Consider a CI check that flags accounts-api memory
+  limits below a known minimum before merge.'
+evidence: '- gitops#25 "dev: right-size accounts-api to free node capacity" (bb25f82), touching dev only,
+  merged 10:21:37Z. ArgoCD created ReplicaSet accounts-api-56db4654ff at 10:23:54Z.
+
+  - Pod accounts-api-56db4654ff-bm4rz: probes refused from 10:24:35Z. 9 restarts, last terminated OOMKilled
+  (exit 137) at 10:47:43Z, then CrashLoopBackOff. Previous-container logs empty (killed before logging).
+
+  - Deployment: ProgressDeadlineExceeded. ArgoCD harbourbank-dev Synced/Degraded, last sync Failed at
+  10:40:07Z.
+
+  - The same image (sha-612ccc1, sha256:ebb20151...) was healthy in qa and prod, which rules out the image.
+
+  - Revert gitops#26 (fcb43ac) merged 11:14:20Z. ArgoCD sync Succeeded at 11:15:29Z with the db-migrate
+  and PostSync smoke test hooks Succeeded. Dev Healthy 1/1 with no alerts firing (checked 11:21Z).'
