@@ -1,0 +1,29 @@
+# Load every environment's accounts-api config with the app's own validation, on each PR that
+# could change it. Catches values Kustomize accepts but the app refuses (drill 2: "5s" for a
+# number), before merge instead of during the rollout. See .github/scripts/check-app-config.sh.
+#
+# Not a required check yet: promotion PRs are opened with the workflow's GITHUB_TOKEN, and
+# GitHub runs no workflows for those, so a required check would block every promotion. The
+# agent's GitHub App identity (Phase 3) removes that limit.
+name: check-config
+
+on:
+  pull_request:
+    paths:
+      - apps/harbourbank/**
+      - .github/scripts/check-app-config.sh
+      - .github/workflows/check-config.yml
+
+permissions:
+  contents: read
+
+jobs:
+  app-config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Load each environment's config with its pinned image
+        run: .github/scripts/check-app-config.sh dev qa prod
