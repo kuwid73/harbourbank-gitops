@@ -16,6 +16,16 @@ patches:
       - op: replace
         path: /spec/rules/0/host
         value: accounts-dev.localhost
+  # dev runs one pod with light traffic: give node capacity back to the other environments
+  - target:
+      kind: Deployment
+      name: accounts-api
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: {cpu: 25m, memory: 32Mi}
+          limits: {memory: 48Mi}
 # Written by harbourbank-app CI on every merge to main - don't edit by hand.
 # newTag says which commit; digest makes the reference immutable (a tag can be re-pushed).
 images:
