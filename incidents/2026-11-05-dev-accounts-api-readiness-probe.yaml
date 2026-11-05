@@ -1,0 +1,36 @@
+id: 2026-11-05-dev-accounts-api-readiness-probe
+title: 'dev accounts-api rollout stuck: readiness probe path returned 404'
+environments:
+- dev
+started: '2026-11-05T11:58:55Z'
+detected: '2026-11-05T12:19:53Z'
+restored: '2026-11-05T12:40:55Z'
+detected_by: kuwid73 (manual status check of dev, via Claude)
+caused_by: gitops#29
+remediation: rollback
+impact: 'harbourbank-dev was Degraded for about 42 minutes, and deploys to dev were blocked: the sync
+  for 88150b0 failed after 5 retries. The new accounts-api pod never became ready. The previous pod (accounts-api-6b7c4d89db-gfhjh)
+  stayed ready and kept serving, so dev''s API was still reachable. The database was healthy and end-of-day
+  was not affected (2026-11-04 closed, ledger imbalance 0). QA and prod were not affected.'
+follow_up: Before merging a probe path change, check that the app actually serves that path, for example
+  in CI against the app's routes, or by testing it against the running image. Check whether dev's KubePodNotReady
+  alert reaches a person; detection here relied on a manual check about 21 minutes after the start.
+evidence: '- PR #29 (88150b0, merged 11:55:54Z) changed only the dev accounts-api readiness probe path.
+  The image was unchanged (sha-612ccc1), the same one running healthy in QA and prod.
+
+  - New pod accounts-api-795bf74476-gcbqx was created at 11:58:54Z. The first probe got connection refused
+  at 11:58:55Z, then ''Readiness probe failed: HTTP probe failed with statuscode: 404'', repeating (248
+  by 12:18:56Z, 496 by 12:38:57Z).
+
+  - The app logs for that pod show each probe request as route ''unmatched'', status 404: the probe path
+  is not an endpoint the app serves.
+
+  - Deployment accounts-api: Progressing=False, ProgressDeadlineExceeded.
+
+  - ArgoCD harbourbank-dev Synced/Degraded. The last sync Failed at 12:15:07Z (''one or more synchronization
+  tasks completed unsuccessfully (retried 5 times)'').
+
+  - KubePodNotReady was firing for the pod at 12:19:53Z.
+
+  - Rollback: PR #30 reverted #29. It was merged at 12:36:37Z, and ArgoCD deployed a26ab84 at 12:40:55Z.
+  At 12:43:24Z dev reported healthy with no open problems.'
