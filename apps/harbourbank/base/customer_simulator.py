@@ -8,6 +8,13 @@ failed request (timeout, 5xx) is retried with the SAME key, so a retry can never
 Salary-day keys are derived from the run's name: if Kubernetes re-runs a crashed salary job,
 the API replays the payments already made instead of paying them again.
 
+Customers behave like people: each account mostly pays a stable circle of payees, usually small
+amounts, a couple of times an hour. Now and then fraud happens (SIM_SCAM_EVERY_SECONDS,
+SIM_TAKEOVER_EVERY_SECONDS; 0 switches one off), so fraud-check has real work:
+  scam      a customer is talked into a large first payment to a mule's new account
+  takeover  a stolen account is emptied by a quick burst of small transfers to a mule
+Each is logged with what the bank did ("fraud scenario"), the ground truth to compare with.
+
 Standard library only: runs from the accounts-api image with this file mounted from a ConfigMap.
 """
 import json
@@ -26,9 +33,15 @@ API_URL = os.environ.get("API_URL", "http://accounts-api")
 CUSTOMERS = int(os.environ.get("SIM_CUSTOMERS", "20"))
 REQUESTS_PER_SECOND = float(os.environ.get("SIM_REQUESTS_PER_SECOND", "1"))
 SALARY_CONCURRENCY = int(os.environ.get("SALARY_CONCURRENCY", "20"))
+SCAM_EVERY_SECONDS = float(os.environ.get("SIM_SCAM_EVERY_SECONDS", "600"))
+TAKEOVER_EVERY_SECONDS = float(os.environ.get("SIM_TAKEOVER_EVERY_SECONDS", "1800"))
+TAKEOVER_TRANSFERS = 12      # more than fraud-check's max_transfers_per_hour (10)
+CIRCLE_SIZE = 5
 RUN_ID = os.environ.get("RUN_ID") or f"manual-{uuid.uuid4().hex[:8]}"
 # Marks simulated customers; .example is reserved and can never be a real address
 DOMAIN = "sim.harbourbank.example"
+# Mules get their own domain, so they are never part of the everyday population
+MULE_EMAIL = "mule@fraud.sim.harbourbank.example"
 KEY_NAMESPACE = uuid.UUID("5f0c2a1e-3b7d-4c55-9a8e-6d2b1f4e8c90")
 
 FIRST_NAMES = ["Amara", "Bastian", "Chiara", "Dmitri", "Elif", "Farid", "Greta", "Hiro", "Ines", "Jonas",
@@ -164,14 +177,30 @@ def view_statement(population):
     count(f"statement {status}")
 
 
+def circle(population, account):
+    """The people this account usually pays: stable for the account, same currency."""
+    others = sorted(a["id"] for accs in population.values() for a in accs
+                    if a["currency"] == account["currency"] and a["id"] != account["id"])
+    return random.Random(account["id"]).sample(others, min(CIRCLE_SIZE, len(others)))
+
+
 def pay_someone(population):
     source = pick_account(population)
-    target = pick_account(population, source["currency"])
-    if target is None or target["id"] == source["id"]:
+    friends = circle(population, source)
+    if not friends:
         return
-    # Mostly small payments; now and then a large one that may exceed the balance
-    amount = random.randint(5, 300) if random.random() < 0.9 else random.randint(2000, 6000)
-    move_money("transfer", "/transfers", {"from_account_id": source["id"], "to_account_id": target["id"],
+    if random.random() < 0.95:
+        target_id = random.choice(friends)
+    else:     # now and then someone new, as people do
+        target = pick_account(population, source["currency"])
+        if target is None or target["id"] == source["id"]:
+            return
+        target_id = target["id"]
+    # Mostly small payments; sometimes a bigger one; rarely a large one (still to someone they know)
+    roll = random.random()
+    amount = random.randint(5, 150) if roll < 0.9 else random.randint(150, 600) if roll < 0.99 \
+        else random.randint(1000, 3000)
+    move_money("transfer", "/transfers", {"from_account_id": source["id"], "to_account_id": target_id,
                                           "amount_cents": amount * 100,
                                           "reference": random.choice(PAYMENT_REFERENCES)})
 
@@ -190,18 +219,87 @@ def wrong_currency(population):
                                               "amount_cents": 1000, "reference": "Holiday money"})
 
 
-ACTIONS = [(check_balance, 35), (view_statement, 25), (pay_someone, 30), (cash_deposit, 8), (wrong_currency, 2)]
+# Weights: with SIM_CUSTOMERS sized to the request rate, each account makes about two transfers
+# an hour, well under fraud-check's "too many in an hour" and the daily limit
+ACTIONS = [(check_balance, 45), (view_statement, 33), (pay_someone, 10), (cash_deposit, 10), (wrong_currency, 2)]
+
+
+# --- fraud scenarios ---------------------------------------------------------------------
+
+_mule = {}
+
+
+def mule_account(currency):
+    """A fresh account for the mule: every scam pays someone the victim has never paid."""
+    if "id" not in _mule:
+        found = next((c for c in paged("/customers") if c["email"] == MULE_EMAIL), None)
+        if found is None:
+            status, found = call("POST", "/customers", {"full_name": "Quick Prize Holdings", "email": MULE_EMAIL})
+            if status != 201:
+                raise RuntimeError(f"creating the mule returned {status}")
+        _mule["id"] = found["id"]
+    status, account = call("POST", "/accounts", {"customer_id": _mule["id"], "currency": currency})
+    if status != 201:
+        raise RuntimeError(f"opening a mule account returned {status}")
+    return account
+
+
+def outcome(data):
+    if not isinstance(data, dict):
+        return "error"
+    return data.get("reject_reason") or data.get("status") or data.get("error") or "unknown"
+
+
+def scam(population):
+    victim = pick_account(population, "USD")
+    mule = mule_account(victim["currency"])
+    amount = random.randint(1000, 3000) * 100
+    status, data = move_money("scam", "/transfers", {"from_account_id": victim["id"], "to_account_id": mule["id"],
+                                                     "amount_cents": amount, "reference": "Prize release fee"})
+    log("INFO", "fraud scenario", scenario="scam", from_account_id=victim["id"], amount_cents=amount,
+        http_status=status, result=outcome(data), fraud_check=(data or {}).get("fraud_check"))
+
+
+def takeover(population):
+    victim = pick_account(population, "USD")
+    mule = mule_account(victim["currency"])
+    results = Counter()
+    for _ in range(TAKEOVER_TRANSFERS):
+        _, data = move_money("takeover", "/transfers", {"from_account_id": victim["id"], "to_account_id": mule["id"],
+                                                        "amount_cents": random.randint(40, 90) * 100,
+                                                        "reference": "Transfer"})
+        results[outcome(data)] += 1
+        time.sleep(random.uniform(1, 3))
+    log("INFO", "fraud scenario", scenario="takeover", from_account_id=victim["id"],
+        transfers=TAKEOVER_TRANSFERS, results=dict(results))
+
+
+def start_scenario(scenario, population):
+    """In its own thread, so a burst doesn't pause everyday customers."""
+    def go():
+        try:
+            scenario(population)
+        except Exception as exc:  # noqa: BLE001
+            count(f"simulator error {type(exc).__name__}")
+            log("WARNING", "fraud scenario failed", scenario=scenario.__name__, error=str(exc))
+    threading.Thread(target=go, daemon=True).start()
+
+
+def next_time(every):
+    return time.monotonic() + random.expovariate(1 / every) if every > 0 else float("inf")
 
 
 def run():
     log("INFO", "customer simulator starting", api_url=API_URL, customers=CUSTOMERS,
-        requests_per_second=REQUESTS_PER_SECOND)
+        requests_per_second=REQUESTS_PER_SECOND, scam_every_seconds=SCAM_EVERY_SECONDS,
+        takeover_every_seconds=TAKEOVER_EVERY_SECONDS)
     while call("GET", "/readyz")[0] != 200:
         log("INFO", "waiting for accounts-api to be ready")
         time.sleep(5)
     population = ensure_customers()
     functions, weights = zip(*ACTIONS, strict=True)
     next_report = next_refresh = time.monotonic() + 60
+    next_scam, next_takeover = next_time(SCAM_EVERY_SECONDS), next_time(TAKEOVER_EVERY_SECONDS)
     while True:
         try:
             random.choices(functions, weights)[0](population)
@@ -209,6 +307,12 @@ def run():
             count(f"simulator error {type(exc).__name__}")
         time.sleep(random.expovariate(REQUESTS_PER_SECOND))    # Poisson arrivals, like real customers
         now = time.monotonic()
+        if now >= next_scam:
+            start_scenario(scam, population)
+            next_scam = next_time(SCAM_EVERY_SECONDS)
+        if now >= next_takeover:
+            start_scenario(takeover, population)
+            next_takeover = next_time(TAKEOVER_EVERY_SECONDS)
         if now >= next_report:
             with stats_lock:
                 log("INFO", "last minute", outcomes=dict(sorted(stats.items())))
@@ -241,15 +345,17 @@ def salary_day():
                         {"amount_cents": salaries[cid], "reference": f"Salary {RUN_ID}"},
                         stable_key(RUN_ID, "salary", cid))
 
-    # Everyone pays rent (about 30% of salary) and a few bills to other customers, all at once
-    customer_ids = list(payroll)
+    # Everyone pays rent (about 30% of salary) and a few bills to other customers, all at once.
+    # The landlord is the same every month (seeded by the customer), so rent is a known payee.
+    customer_ids = sorted(payroll)
     with ThreadPoolExecutor(SALARY_CONCURRENCY) as pool:
         for cid, account in payroll.items():
             payments = [("Rent", salaries[cid] * 3 // 10)]
             payments += [(bill, rng.randint(40, 250) * 100)
                          for bill in rng.sample(["Electricity", "Water", "Phone", "Internet", "Insurance"], 3)]
+            landlord = random.Random(cid).choice([c for c in customer_ids if c != cid])
             for n, (reference, amount) in enumerate(payments):
-                payee = payroll[rng.choice([c for c in customer_ids if c != cid])]
+                payee = payroll[landlord if n == 0 else rng.choice([c for c in customer_ids if c != cid])]
                 pool.submit(move_money, "bill", "/transfers",
                             {"from_account_id": account["id"], "to_account_id": payee["id"],
                              "amount_cents": amount, "reference": reference},

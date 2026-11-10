@@ -38,6 +38,9 @@ configMapGenerator:
   # Traffic volume per environment; prod overrides it
   - name: customer-simulator-config
     literals:
-      - SIM_CUSTOMERS=20
+      # About two transfers per account per hour: customers grow with the request rate
+      - SIM_CUSTOMERS=80
       - SIM_REQUESTS_PER_SECOND=0.5
+      - SIM_SCAM_EVERY_SECONDS=600       # a scam attempt about every 10 minutes
+      - SIM_TAKEOVER_EVERY_SECONDS=1800  # an account takeover about every 30 minutes
       - SALARY_CONCURRENCY=20

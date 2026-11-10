@@ -12,7 +12,7 @@ configMapGenerator:
   - name: customer-simulator-config
     behavior: merge
     literals:
-      - SIM_CUSTOMERS=60
+      - SIM_CUSTOMERS=300   # 2 requests/s: about two transfers per account per hour
       - SIM_REQUESTS_PER_SECOND=2
 patches:
   # fraud-check is off here until a promotion brings an image that contains it: the image
