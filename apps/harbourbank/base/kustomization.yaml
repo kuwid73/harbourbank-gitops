@@ -7,6 +7,7 @@ resources:
   - accounts-db.yaml
   - migrate-job.yaml
   - accounts-api.yaml
+  - fraud-check.yaml
   - smoke-test-job.yaml
   - customer-simulator.yaml
   - end-of-day.yaml
@@ -20,6 +21,14 @@ configMapGenerator:
       - DB_POOL_SIZE=5
       - DAILY_TRANSFER_LIMIT_CENTS=1000000
       - INTEREST_RATE_BPS=150   # 1.50% a year, paid daily by the end-of-day batch
+  # fraud-check's rules (see harbourbank-app README); a change rolls its pods
+  - name: fraud-check-config
+    literals:
+      - LOG_LEVEL=INFO
+      - FRAUD_LARGE_NEW_PAYEE_CENTS=100000   # 1,000.00 first payment to a new payee
+      - FRAUD_MAX_TRANSFERS_PER_HOUR=10
+      - FRAUD_LARGE_AMOUNT_CENTS=500000      # 5,000.00
+      - FRAUD_BLOCK_SCORE=70
   - name: accounts-api-smoke-test
     files:
       - smoke_test.py

@@ -8,6 +8,10 @@ configMapGenerator:
     behavior: merge
     literals:
       - ENVIRONMENT=dev
+      # fraud-check on: score customer transfers first. Off in qa and prod until promoted.
+      - FRAUD_CHECK_URL=http://fraud-check
+      - FRAUD_CHECK_TIMEOUT_SECONDS=0.3
+      - FRAUD_CHECK_FALLBACK_LIMIT_CENTS=10000   # while it's unavailable, up to 100.00 goes through unchecked
 patches:
   - target:
       kind: Ingress

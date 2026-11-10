@@ -15,6 +15,15 @@ configMapGenerator:
       - SIM_CUSTOMERS=60
       - SIM_REQUESTS_PER_SECOND=2
 patches:
+  # fraud-check is off here until a promotion brings an image that contains it: the image
+  # pinned below predates it. That promotion sets replicas and FRAUD_CHECK_URL.
+  - target:
+      kind: Deployment
+      name: fraud-check
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0
   - target:
       kind: Ingress
       name: accounts-api
