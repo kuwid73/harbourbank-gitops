@@ -49,6 +49,29 @@ spec:
           annotations:
             summary: "Database connection pool full on {{ $labels.pod }} ({{ $labels.namespace }})"
             description: "All pooled connections are in use; new requests wait, then fail with 503 db_pool_exhausted. Look for slow queries or long transactions; DB_POOL_SIZE is in the accounts-api-config ConfigMap."
+        # fraud-check, seen from accounts-api's side: what customers feel. While it's unavailable,
+        # small transfers go through unchecked and large ones are rejected (fraud_check_unavailable).
+        - alert: FraudCheckUnavailable
+          expr: |
+            sum by (namespace) (rate(bank_fraud_checks_total{job="accounts-api", outcome=~"timeout|error"}[5m]))
+              / sum by (namespace) (rate(bank_fraud_checks_total{job="accounts-api"}[5m])) > 0.1
+          for: 2m
+          labels:
+            severity: '{{ if eq $labels.namespace "harbourbank-prod" }}critical{{ else }}warning{{ end }}'
+          annotations:
+            summary: "{{ $value | humanizePercentage }} of fraud checks fail in {{ $labels.namespace }}"
+            description: "accounts-api can't get an answer from fraud-check: transfers over FRAUD_CHECK_FALLBACK_LIMIT_CENTS are rejected (fraud_check_unavailable), smaller ones go through unchecked. The outcome label says timeout or error; accounts-api logs 'fraud check unavailable' with the error. Check the fraud-check pods, its Service and NetworkPolicy."
+        - alert: FraudCheckSlow
+          expr: |
+            histogram_quantile(0.95, sum by (namespace, le) (
+              rate(bank_fraud_check_duration_seconds_bucket{job="accounts-api"}[5m])
+            )) > 0.2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "fraud checks take {{ $value | humanizeDuration }} (p95) in {{ $labels.namespace }}"
+            description: "Every customer transfer waits for fraud-check. Near FRAUD_CHECK_TIMEOUT_SECONDS, calls start timing out and FraudCheckUnavailable follows. Compare with fraud-check's own fraud_check_duration_seconds: if that is fast, the delay is on the network or in its pods' CPU."
         - alert: AccountsDbMigrationFailed
           expr: kube_job_failed{namespace=~"harbourbank-.*", job_name="accounts-db-migrate", condition="true"} == 1
           labels:

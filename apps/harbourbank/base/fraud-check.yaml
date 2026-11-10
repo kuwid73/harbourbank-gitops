@@ -1,0 +1,131 @@
+# fraud-check: scores each customer transfer before accounts-api moves the money.
+# Same image as accounts-api, started with the fraud-check command. Stateless: no database,
+# no customer data. Only accounts-api may call it (NetworkPolicy below).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fraud-check
+spec:
+  replicas: 1   # qa and prod set 0 until a promotion brings an image that contains it
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fraud-check
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fraud-check
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: fraud-check
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: fraud-check
+          image: ghcr.io/kuwid73/harbourbank-accounts-api
+          command: ["uvicorn", "fraud_check.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000",
+                    "--no-access-log"]
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: fraud-check-config
+          # No dependencies: ready means serving. Liveness restarts a hung process.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fraud-check
+  labels:
+    app.kubernetes.io/name: fraud-check
+spec:
+  selector:
+    app.kubernetes.io/name: fraud-check
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# Least privilege between services: only accounts-api pods (same namespace) may score transfers,
+# and Prometheus may scrape /metrics. Everything else is refused.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fraud-check
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: fraud-check
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: accounts-api
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: http
+---
+# Prometheus scrapes /metrics from every fraud-check pod (job="fraud-check")
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: fraud-check
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fraud-check
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
