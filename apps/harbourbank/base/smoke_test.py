@@ -4,6 +4,9 @@ Read-only by design - it must be safe in production, so it never moves money:
   1. the API is ready (which includes reaching its database)
   2. it serves the commit this Job's image was built from, in the expected environment
   3. a real database query through the API succeeds
+  4. the API can reach the services it calls (GET /dependencies; today: fraud-check).
+     Drill 5 (2026-11-11): a NetworkPolicy change cut the API off from fraud-check while every
+     pod stayed Ready. Only the API can tell, so it is asked. Images without the endpoint skip this.
 
 Standard library only, so it works with any accounts-api image version.
 """
@@ -50,10 +53,22 @@ def main():
     if status != 200 or json.loads(body) != []:
         failures.append(f"account lookup returned {status or body.decode()}")
 
+    status, body = get("/dependencies")
+    dependencies = {}
+    if status == 404:
+        log("INFO", "dependency check skipped: this image has no /dependencies")
+    elif status != 200:
+        failures.append(f"/dependencies returned {status or body.decode()}")
+    else:
+        for name, state in json.loads(body).items():
+            dependencies[name] = state.get("status")
+            if state.get("status") not in ("ok", "not_configured"):
+                failures.append(f"accounts-api cannot reach {name}: {state.get('error') or state.get('status')}")
+
     if failures:
-        log("ERROR", "smoke test failed", failures=failures, **expected)
+        log("ERROR", "smoke test failed", failures=failures, dependencies=dependencies, **expected)
         sys.exit(1)
-    log("INFO", "smoke test passed", **expected)
+    log("INFO", "smoke test passed", dependencies=dependencies, **expected)
 
 
 if __name__ == "__main__":
