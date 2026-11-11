@@ -55,6 +55,29 @@ committed SealedSecrets could no longer be decrypted.
 
 Rollout order inside each environment (ArgoCD sync waves): database healthy -> migration Job succeeds -> API.
 
+## Customer simulator
+
+Each environment has synthetic customers (`apps/harbourbank/base/customer_simulator.py`): they check
+balances, read statements, make deposits and pay each other, each account mostly paying a stable circle
+of payees, a couple of times an hour. Now and then fraud happens, so fraud-check has real work:
+
+| Scenario | About every | What it is |
+|---|---|---|
+| **Scam** | 10 min (`SIM_SCAM_EVERY_SECONDS`) | The real customer is tricked (a fake "prize release fee") into one large payment to someone they have never paid before. |
+| **Account takeover** | 30 min (`SIM_TAKEOVER_EVERY_SECONDS`) | A criminal has got into a customer's online banking (stolen password, phished one-time code, malware) and empties the account fast: many small transfers in quick succession to one new payee. |
+
+**Account takeover, in more detail.** The criminal logs in as the customer, correctly, so each transfer
+looks ordinary on its own (around 60.00). Only the pattern gives it away: an account that normally makes a
+couple of transfers an hour suddenly makes a dozen in a minute, all to the same new payee. The simulator
+sends 12 transfers of 40.00-90.00, 1-3 seconds apart. fraud-check's "too many transfers in an hour" rule
+blocks from the 10th transfer in an hour, so the first 9 or 10 go through and the rest are rejected
+`fraud_suspected`: speed rules limit the loss rather than prevent it entirely.
+
+Both scenarios pay a **mule account**: an account that receives stolen money to move it on. Every scenario
+opens a fresh one for the mule customer (`mule@fraud.sim.harbourbank.example`, outside the everyday
+customers). Each run logs `"msg": "fraud scenario"` with what the bank actually did, the ground truth to
+compare with fraud-check's decisions. `0` switches a scenario off.
+
 ## UIs
 
 | UI | URL |
