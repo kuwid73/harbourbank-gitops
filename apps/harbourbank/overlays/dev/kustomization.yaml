@@ -24,5 +24,5 @@ patches:
 # newTag says which commit; digest makes the reference immutable (a tag can be re-pushed).
 images:
   - name: ghcr.io/kuwid73/harbourbank-accounts-api
-    newTag: sha-af98694
-    digest: sha256:bc9ae383852a15d78205cf69b52362e936085e1856b15e97af0ac54dcb8bec65
+    newTag: sha-530b5a7
+    digest: sha256:68eb163191491dc5b329278eefa3a2252b2f7b90c2d5f5c4be7c58a6b528797c
