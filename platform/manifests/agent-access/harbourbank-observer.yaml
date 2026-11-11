@@ -1,6 +1,6 @@
 # harbourbank-observer: the read-only identity of the Phase 2 MCP server (harbourbank-ops-mcp).
 #
-# What it can do:   read workloads, logs, events, ArgoCD apps and databases in the Harbour Bank
+# What it can do:   read workloads, logs, events, network policies, ArgoCD apps and databases in the Harbour Bank
 #                   namespaces; query Prometheus and Loki (HTTP GET only); see node status.
 # What it cannot:   write anything anywhere; read Secrets or ConfigMaps; exec into pods;
 #                   read any other namespace's workloads.
@@ -28,8 +28,10 @@ rules:
   - apiGroups: [batch]
     resources: [jobs, cronjobs]
     verbs: [get, list, watch]
+  # networkpolicies: who may talk to whom. Drill 5 (2026-11-11): a policy cut accounts-api off from
+  # fraud-check and the agents could only infer it. Rules and labels only; nothing sensitive.
   - apiGroups: [networking.k8s.io]
-    resources: [ingresses]
+    resources: [ingresses, networkpolicies]
     verbs: [get, list, watch]
   - apiGroups: [events.k8s.io]
     resources: [events]
