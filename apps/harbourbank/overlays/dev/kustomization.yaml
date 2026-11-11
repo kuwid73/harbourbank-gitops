@@ -11,7 +11,10 @@ configMapGenerator:
       # fraud-check on: score customer transfers first. Off in qa and prod until promoted.
       - FRAUD_CHECK_URL=http://fraud-check
       - FRAUD_CHECK_TIMEOUT_SECONDS=0.3
-      - FRAUD_CHECK_FALLBACK_LIMIT_CENTS=10000 # while it's unavailable, up to 100.00 goes through unchecked
+      # While fraud-check is unavailable, a transfer goes through unchecked only if it is up to 50.00
+      # AND the account has made fewer than 5 transfers in the last hour (drill 5: takeovers passed)
+      - FRAUD_CHECK_FALLBACK_LIMIT_CENTS=5000
+      - FRAUD_CHECK_FALLBACK_MAX_TRANSFERS_PER_HOUR=5
 patches:
   - target:
       kind: Ingress
