@@ -12,7 +12,7 @@ configMapGenerator:
   - name: customer-simulator-config
     behavior: merge
     literals:
-      - SIM_CUSTOMERS=300   # 2 requests/s: about two transfers per account per hour
+      - SIM_CUSTOMERS=300 # 2 requests/s: about two transfers per account per hour
       - SIM_REQUESTS_PER_SECOND=2
 patches:
   # fraud-check is off here until a promotion brings an image that contains it: the image
@@ -49,5 +49,5 @@ patches:
 # Changed only by a promotion PR from qa, approved by a code owner.
 images:
   - name: ghcr.io/kuwid73/harbourbank-accounts-api
-    newTag: sha-98e7890
-    digest: sha256:358f1502320db81f52b30c97c5890ac1d529c6aafcceca2e8a995d4fdb6567a0
+    newTag: sha-48781c6
+    digest: sha256:9a5f234aa6218c624d2cdb5c24f0399fd7e37b7b58c9f237da172f2642426d56
