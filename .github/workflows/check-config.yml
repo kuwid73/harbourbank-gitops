@@ -1,6 +1,7 @@
 # Load every environment's accounts-api config with the app's own validation, on each PR that
 # could change it. Catches values Kustomize accepts but the app refuses (drill 2: "5s" for a
 # number), before merge instead of during the rollout. See .github/scripts/check-app-config.sh.
+# Also checks that NetworkPolicy pod selectors match real pods (check-network-policies.sh).
 #
 # Not a required check yet: promotion PRs are opened with the workflow's GITHUB_TOKEN, and
 # GitHub runs no workflows for those, so a required check would block every promotion. The
@@ -11,7 +12,7 @@ on:
   pull_request:
     paths:
       - apps/harbourbank/**
-      - .github/scripts/check-app-config.sh
+      - .github/scripts/**
       - .github/workflows/check-config.yml
 
 permissions:
@@ -27,3 +28,6 @@ jobs:
           persist-credentials: false
       - name: Load each environment's config with its pinned image
         run: .github/scripts/check-app-config.sh dev qa prod
+      # Drill 5: a selector that matches nothing silently cut accounts-api off from fraud-check
+      - name: Every NetworkPolicy pod selector matches a pod
+        run: .github/scripts/check-network-policies.sh dev qa prod
