@@ -94,8 +94,8 @@ spec:
       port: 80
       targetPort: http
 ---
-# Least privilege between services: only accounts-api pods (same namespace) may score transfers,
-# and Prometheus may scrape /metrics. Everything else is refused.
+# Least privilege between services: only the pods that send transfers (same namespace) may score
+# them, and Prometheus may scrape /metrics. Everything else is refused.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -109,7 +109,7 @@ spec:
     - from:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/name: accounts-api
+              app.kubernetes.io/name: customer-simulator
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: monitoring
