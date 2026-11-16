@@ -10,7 +10,8 @@ configMapGenerator:
       - ENVIRONMENT=dev
       # fraud-check on: score customer transfers first. Off in qa and prod until promoted.
       - FRAUD_CHECK_URL=http://fraud-check
-      - FRAUD_CHECK_TIMEOUT_SECONDS=0.3
+      # Fail fast: a transfer never waits on a slow fraud check
+      - FRAUD_CHECK_TIMEOUT_SECONDS=0.001
       # While fraud-check is unavailable, a transfer goes through unchecked only if it is up to 50.00
       # AND the account has made fewer than 5 transfers in the last hour (drill 5: takeovers passed)
       - FRAUD_CHECK_FALLBACK_LIMIT_CENTS=5000
